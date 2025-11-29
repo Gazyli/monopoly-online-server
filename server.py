@@ -7,7 +7,7 @@ import os
 
 # Load board and pawns from shared directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SHARED_DIR = os.path.join(SCRIPT_DIR, "..", "shared", "monopoly-online-shared")
+SHARED_DIR = os.path.join(SCRIPT_DIR, "..", "monopoly-online-shared")
 
 with open(os.path.join(SHARED_DIR, "monopoly-wroclaw.json"), "r") as f:
     BOARD_DATA = json.load(f)

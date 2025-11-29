@@ -11,10 +11,9 @@ A Python WebSocket server for the Monopoly Online game.
 
 1. Clone the repository:
    ```bash
-   mkdir server
-   cd server
-   git clone https://github.com/Gazyli/monopoly-online-server.git
+   mkdir monopoly-online-server
    cd monopoly-online-server
+   git clone https://github.com/Gazyli/monopoly-online-server.git .
    ```
 
 2. Install dependencies:
@@ -63,12 +62,12 @@ The server communicates using JSON messages over WebSocket. See [comm-protocol.m
 ## Project Structure
 
 ```
-server/monopoly-online-server/
+monopoly-online-server/
 ├── server.py          # Main WebSocket server
 ├── requirements.txt   # Python dependencies
 └── README.md          # This file
 
-shared/monopoly-online-shared/
+monopoly-online-shared/
 ├── comm-protocol.md       # Communication protocol docs
 ├── monopoly-wroclaw.json  # Board configuration
 └── pawn-set-1.json        # Pawn colors configuration

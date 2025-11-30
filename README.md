@@ -57,6 +57,7 @@ The server communicates using JSON messages over WebSocket. See [comm-protocol.m
 | `TRANSACTION` | Balance change occurred |
 | `PROPERTY_TRANSFER` | Property ownership changed |
 | `CHOICE` | Player must make a choice |
+| `TILE_MESSAGE` | Chance/Community Chest/Penalty tile message |
 | `ERROR` | An error occurred |
 
 ## Project Structure

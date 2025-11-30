@@ -285,8 +285,10 @@ async def handle_request_roll(websocket, data):
         }
     })
     
-    # Check landed tile and send CHOICE if purchasable
+    # Check landed tile and handle accordingly
     tile = BOARD_DATA["board"][new_position]
+    tile_type = tile["type"]
+    
     if tile["properties"]["purchasable"]:
         # Check if property is already owned
         property_owned = False
@@ -332,6 +334,83 @@ async def handle_request_roll(websocket, data):
                     "balance-sync": owner["balance"]
                 }
             })
+    
+    elif tile_type == "chance":
+        # Random chance card effect
+        chance_cards = [
+            {"message": "Otrzymujesz zwrot podatku. Otrzymujesz 200$", "amount": 200},
+            {"message": "Wygrywasz w konkursie piękności. Otrzymujesz 100$", "amount": 100},
+            {"message": "Płacisz za naprawę ulicy. Zapłać 150$", "amount": -150},
+            {"message": "Idziesz na start. Otrzymujesz 200$", "amount": 200},
+            {"message": "Bank wypłaca ci dywidendę. Otrzymujesz 50$", "amount": 50},
+        ]
+        card = random.choice(chance_cards)
+        
+        await send_json(websocket, {
+            "type": "TILE_MESSAGE",
+            "data": {
+                "title": "Szansa",
+                "message": card["message"]
+            }
+        })
+        
+        player["balance"] += card["amount"]
+        await send_json(websocket, {
+            "type": "TRANSACTION",
+            "data": {
+                "balance-change": card["amount"],
+                "balance-sync": player["balance"]
+            }
+        })
+    
+    elif tile_type == "community chest":
+        # Random community chest card effect
+        community_cards = [
+            {"message": "Płacisz podatek. Zapłać 200$", "amount": -200},
+            {"message": "Otrzymujesz spadek. Otrzymujesz 100$", "amount": 100},
+            {"message": "Płacisz za ubezpieczenie. Zapłać 50$", "amount": -50},
+            {"message": "Wygrywasz drugą nagrodę w konkursie. Otrzymujesz 75$", "amount": 75},
+            {"message": "Otrzymujesz zwrot podatku dochodowego. Otrzymujesz 20$", "amount": 20},
+        ]
+        card = random.choice(community_cards)
+        
+        await send_json(websocket, {
+            "type": "TILE_MESSAGE",
+            "data": {
+                "title": "Kasa Społeczna",
+                "message": card["message"]
+            }
+        })
+        
+        player["balance"] += card["amount"]
+        await send_json(websocket, {
+            "type": "TRANSACTION",
+            "data": {
+                "balance-change": card["amount"],
+                "balance-sync": player["balance"]
+            }
+        })
+    
+    elif tile_type == "penalty":
+        # Penalty tile (e.g., Gazeta, Radio Wrocław)
+        penalty = tile["trespass-costs"][0]
+        
+        await send_json(websocket, {
+            "type": "TILE_MESSAGE",
+            "data": {
+                "title": tile["name"],
+                "message": f"Zapłać {penalty}$"
+            }
+        })
+        
+        player["balance"] -= penalty
+        await send_json(websocket, {
+            "type": "TRANSACTION",
+            "data": {
+                "balance-change": -penalty,
+                "balance-sync": player["balance"]
+            }
+        })
     
     return None
 

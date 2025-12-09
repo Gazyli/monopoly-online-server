@@ -63,7 +63,7 @@ async def handle_game_create(websocket, data):
     pawn = PAWN_DATA["pawns"][0]["name"]  # First player gets first pawn
     
     lobbies[lobby_code] = {
-        "players": {websocket: {"username": username, "pawn": pawn, "position": 0, "balance": STARTING_BALANCE, "owned-properties": [], "has_rolled": False}},
+        "players": {websocket: {"username": username, "pawn": pawn, "position": 0, "balance": STARTING_BALANCE, "owned-properties": [], "owned-properties-levels": {}, "has_rolled": False}},
         "host": websocket,
         "started": False,
         "current_turn_index": 0,
@@ -125,6 +125,7 @@ async def handle_request_join(websocket, data):
         "position": 0,
         "balance": STARTING_BALANCE,
         "owned-properties": [],
+        "owned-properties-levels": {},
         "has_rolled": False
     }
     lobbies[lobby_code]["player_order"].append(websocket)
@@ -159,6 +160,33 @@ async def handle_request_join(websocket, data):
     return None
 
 
+async def handle_game_end(websocket, data):
+    """Handle GAME_END request."""
+    if websocket not in players:
+        return {"type": "ERROR", "data": {"code": 403, "message": "Not in a lobby"}}
+    
+    lobby_code = players[websocket]["lobby"]
+    
+    if lobbies[lobby_code]["host"] != websocket:
+        return {"type": "ERROR", "data": {"code": 403, "message": "Only host can end the game"}}
+    
+    # Broadcast GAME_END to all players
+    await broadcast_to_lobby(lobby_code, {
+        "type": "GAME_END",
+        "data": {
+            "reason": "Host ended the game"
+        }
+    })
+    
+    # Clean up lobby
+    for ws in list(lobbies[lobby_code]["players"].keys()):
+        if ws in players:
+            del players[ws]
+    del lobbies[lobby_code]
+    
+    return None
+
+
 async def handle_game_start(websocket, data):
     """Handle GAME_START request."""
     if websocket not in players:
@@ -189,12 +217,27 @@ async def handle_game_start(websocket, data):
     
     # Send PLAYER_DATA to each player
     for ws, player_data in lobbies[lobby_code]["players"].items():
+        # Initialize owned-properties-levels if not exists
+        if "owned-properties-levels" not in player_data:
+            player_data["owned-properties-levels"] = {}
+        
+        # Build detailed properties list
+        detailed_properties = []
+        for prop_id in player_data["owned-properties"]:
+            tile = BOARD_DATA["board"][prop_id]
+            detailed_properties.append({
+                "id": tile["id"],
+                "name": tile["name"],
+                "color": tile["color"],
+                "level": player_data["owned-properties-levels"].get(prop_id, 0)
+            })
+        
         await send_json(ws, {
             "type": "PLAYER_DATA",
             "data": {
                 "username": player_data["username"],
                 "balance": player_data["balance"],
-                "owned-properties": player_data["owned-properties"]
+                "owned-properties": detailed_properties
             }
         })
     
@@ -314,8 +357,14 @@ async def handle_request_roll(websocket, data):
         elif owner_ws != websocket:
             # Pay rent to owner
             owner = lobby["players"][owner_ws]
-            # Find property level (for now assume level 0)
-            rent = tile["trespass-costs"][0]
+            
+            # Get property level
+            if "owned-properties-levels" not in owner:
+                owner["owned-properties-levels"] = {}
+            property_level = owner["owned-properties-levels"].get(new_position, 0)
+            
+            # Get rent based on property level
+            rent = tile["trespass-costs"][property_level]
             
             player["balance"] -= rent
             owner["balance"] += rent
@@ -434,6 +483,11 @@ async def handle_choice_response(websocket, data):
             player["balance"] -= price
             player["owned-properties"].append(position)
             
+            # Initialize owned-properties-levels if not exists
+            if "owned-properties-levels" not in player:
+                player["owned-properties-levels"] = {}
+            player["owned-properties-levels"][position] = 0
+            
             await send_json(websocket, {
                 "type": "TRANSACTION",
                 "data": {
@@ -455,6 +509,85 @@ async def handle_choice_response(websocket, data):
             })
         else:
             return {"type": "ERROR", "data": {"code": 400, "message": "Insufficient funds"}}
+    
+    return None
+
+
+async def handle_request_upgrade(websocket, data):
+    """Handle REQUEST_UPGRADE from client."""
+    if websocket not in players:
+        return {"type": "ERROR", "data": {"code": 403, "message": "Not in a lobby"}}
+    
+    lobby_code = players[websocket]["lobby"]
+    lobby = lobbies[lobby_code]
+    player = lobby["players"][websocket]
+    
+    property_data = data.get("property", {})
+    property_id = property_data.get("id")
+    
+    if property_id is None:
+        return {"type": "ERROR", "data": {"code": 400, "message": "Property ID required"}}
+    
+    # Check if player owns this property
+    if property_id not in player["owned-properties"]:
+        return {"type": "ERROR", "data": {"code": 403, "message": "You don't own this property"}}
+    
+    # Get tile data
+    tile = BOARD_DATA["board"][property_id]
+    
+    # Check if property is upgradeable
+    if not tile.get("properties", {}).get("levelable", False):
+        return {"type": "ERROR", "data": {"code": 400, "message": "This property cannot be upgraded"}}
+    
+    # Check if player owns all properties of this color (monopoly)
+    property_color = tile["color"]
+    all_properties_of_color = [t for t in BOARD_DATA["board"] if t.get("color") == property_color and t.get("properties", {}).get("purchasable", False)]
+    owned_properties_of_color = [prop_id for prop_id in player["owned-properties"] if BOARD_DATA["board"][prop_id].get("color") == property_color]
+    
+    if len(owned_properties_of_color) < len(all_properties_of_color):
+        return {"type": "ERROR", "data": {"code": 403, "message": "You must own all properties of this color to upgrade"}}
+    
+    # Get current level (stored in player's owned-properties-levels dict)
+    if "owned-properties-levels" not in player:
+        player["owned-properties-levels"] = {}
+    
+    current_level = player["owned-properties-levels"].get(property_id, 0)
+    
+    # Check if already at max level
+    if current_level >= 5:
+        return {"type": "ERROR", "data": {"code": 400, "message": "Property is already at max level"}}
+    
+    # Get upgrade cost (next level's cost)
+    next_level = current_level + 1
+    upgrade_cost = tile["owner-costs"][next_level]
+    
+    # Check if player has enough money
+    if player["balance"] < upgrade_cost:
+        return {"type": "ERROR", "data": {"code": 400, "message": "Insufficient funds"}}
+    
+    # Perform upgrade
+    player["balance"] -= upgrade_cost
+    player["owned-properties-levels"][property_id] = next_level
+    
+    # Send TRANSACTION for cost
+    await send_json(websocket, {
+        "type": "TRANSACTION",
+        "data": {
+            "balance-change": -upgrade_cost,
+            "balance-sync": player["balance"]
+        }
+    })
+    
+    # Send PROPERTY_UPGRADE confirmation
+    await send_json(websocket, {
+        "type": "PROPERTY_UPGRADE",
+        "data": {
+            "property": {
+                "id": property_id,
+                "level": next_level
+            }
+        }
+    })
     
     return None
 
@@ -484,6 +617,10 @@ async def handle_message(websocket):
                     error = await handle_request_roll(websocket, msg_data)
                 elif msg_type == "CHOICE_RESPONSE":
                     error = await handle_choice_response(websocket, msg_data)
+                elif msg_type == "REQUEST_UPGRADE":
+                    error = await handle_request_upgrade(websocket, msg_data)
+                elif msg_type == "GAME_END":
+                    error = await handle_game_end(websocket, msg_data)
                 else:
                     error = {"type": "ERROR", "data": {"code": 400, "message": f"Unknown message type: {msg_type}"}}
                 

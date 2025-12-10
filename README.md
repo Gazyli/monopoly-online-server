@@ -71,5 +71,6 @@ monopoly-online-server/
 monopoly-online-shared/
 ├── comm-protocol.md       # Communication protocol docs
 ├── monopoly-wroclaw.json  # Board configuration
-└── pawn-set-1.json        # Pawn colors configuration
+├── pawn-set-1.json        # Pawn colors configuration
+└── cards.json             # Chance and Community Chest cards
 ```

@@ -15,6 +15,9 @@ with open(os.path.join(SHARED_DIR, "monopoly-wroclaw.json"), "r") as f:
 with open(os.path.join(SHARED_DIR, "pawn-set-1.json"), "r") as f:
     PAWN_DATA = json.load(f)
 
+with open(os.path.join(SHARED_DIR, "cards.json"), "r") as f:
+    CARDS_DATA = json.load(f)
+
 # Game state storage
 lobbies = {}  # lobby_code -> lobby data
 players = {}  # websocket -> player data
@@ -385,15 +388,8 @@ async def handle_request_roll(websocket, data):
             })
     
     elif tile_type == "chance":
-        # Random chance card effect
-        chance_cards = [
-            {"message": "Otrzymujesz zwrot podatku. Otrzymujesz 200$", "amount": 200},
-            {"message": "Wygrywasz w konkursie piękności. Otrzymujesz 100$", "amount": 100},
-            {"message": "Płacisz za naprawę ulicy. Zapłać 150$", "amount": -150},
-            {"message": "Idziesz na start. Otrzymujesz 200$", "amount": 200},
-            {"message": "Bank wypłaca ci dywidendę. Otrzymujesz 50$", "amount": 50},
-        ]
-        card = random.choice(chance_cards)
+        # Random chance card effect from cards.json
+        card = random.choice(CARDS_DATA["chance"])
         
         await send_json(websocket, {
             "type": "TILE_MESSAGE",
@@ -413,15 +409,8 @@ async def handle_request_roll(websocket, data):
         })
     
     elif tile_type == "community chest":
-        # Random community chest card effect
-        community_cards = [
-            {"message": "Płacisz podatek. Zapłać 200$", "amount": -200},
-            {"message": "Otrzymujesz spadek. Otrzymujesz 100$", "amount": 100},
-            {"message": "Płacisz za ubezpieczenie. Zapłać 50$", "amount": -50},
-            {"message": "Wygrywasz drugą nagrodę w konkursie. Otrzymujesz 75$", "amount": 75},
-            {"message": "Otrzymujesz zwrot podatku dochodowego. Otrzymujesz 20$", "amount": 20},
-        ]
-        card = random.choice(community_cards)
+        # Random community chest card effect from cards.json
+        card = random.choice(CARDS_DATA["community-chest"])
         
         await send_json(websocket, {
             "type": "TILE_MESSAGE",
